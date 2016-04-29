@@ -3,7 +3,6 @@
 
 //debug
 bool debug = true;
-bool debug_alcohol = true;
 bool debug_photo = false;
 bool debug_imu = false;
 
@@ -17,14 +16,10 @@ int score_base_increment = 1;
 //score multiplier
 float score_wild_balancing = score_base_increment * 10;
 
-int score_pins[8] = {4, 5, 6, 7, 8, 9, 10, 11};
-
 //states
 bool is_balancing = false;
 
-
-int time_lastFrame = 0;
-int time_delta = 1;
+int timerEnd = 0;
 
 //thresholds
 float acc_epsilon = 0.5f;
@@ -91,12 +86,9 @@ void setup() {
   // set the cursor to (0,0):
 
   setup_imu(0);
-  time_lastFrame = millis();
 }
 
 void loop() {
-  //time_delta = millis() - time_lastFrame;
-  //time_lastFrame = millis();
 
   if (!photo_calibrated || !alcohol_calibrated) {
     if(!alcohol_calibrated){
@@ -129,9 +121,9 @@ void loop_game() {
       sum_multiplier = 1;
     }
 
-  }
+    sum_multiplier *= alcohol_multiplier;
 
-  sum_multiplier *= alcohol_multiplier;
+  }
 
   if (debug_imu) {
     Serial.print("\tacc mag: \t");
@@ -143,7 +135,7 @@ void loop_game() {
     Serial.print("x");
   }
 
-  if(debug_imu || debug_photo || debug_alcohol)
+  if(debug_imu || debug_photo)
     Serial.println();
   if (is_balancing)
     score += score_base_increment * sum_multiplier;
@@ -155,43 +147,6 @@ void display_score() {
   lcd.print(String(is_balancing ? "Balancing    " : "failing      "));
   lcd.setCursor(0, 1);
   lcd.print(String(score) + " - " + String(sum_multiplier) + "x       ");
-}
-
-
-//Fails after 2^16
-void blink_number(unsigned long number, int delay_between_rounds) {
-  unsigned long bit = 1;
-  bool binary[32];
-  int last_index = 0;
-
-  for (int i = 0; i < 32; i++) {
-    binary[i] = (((number & bit) == 0) ? false : true);
-    if (binary[i])last_index = i;
-    bit *= 2;
-  }
-
-  for (int j = 0; j <= last_index; j += 8) {
-    bool b[8];
-    for (int i = 0; i < 8; i++) {
-      b[i] = binary[j + i];
-    }
-    blink_binary(b);
-    delay(50);
-    blink_off();
-    delay(delay_between_rounds);
-  }
-}
-
-void blink_binary(bool binary[]) {
-  for (int i = 0; i < 8; i++) {
-    digitalWrite(score_pins[i], (binary[i] ? HIGH : LOW));
-  }
-}
-
-void blink_off() {
-  for (int i = 0; i < 8; i++) {
-    digitalWrite(score_pins[i], LOW);
-  }
 }
 
 /////////////////////
@@ -207,8 +162,18 @@ void alcohol_calibration() {
   if (alcohol_index < alcohol_samples) {
     if (alcohol_index == 0) {
       Serial.println("calibrating Alcohol");
+      timerEnd = millis() + (alcohol_time_between_samples * alcohol_samples);
+      
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Calibrating");
+      lcd.setCursor(0, 1);
+      lcd.print("Clean Air");
     }
     alcohol_sum += alcohol_value;
+    
+    lcd.setCursor(13,1);
+    lcd.print(String((timerEnd - millis())/1000) + " s");
     delay(alcohol_time_between_samples);
   } else if(alcohol_index < alcohol_samples * 2){
     if(alcohol_index == alcohol_samples){
@@ -220,13 +185,52 @@ void alcohol_calibration() {
       alcohol_sum = 1023;
       Serial.println();
       Serial.println("begin exhaling for as long as possible in 3 second");
-      delay(3000);
+      
+      lcd.clear();
+      lcd.setCursor(0, 0);
+
+      lcd.print("Calibrating");
+      lcd.setCursor(0, 1);
+      lcd.print("Alc. Level in 6s");
+      delay(1000);
+      
+      lcd.setCursor(0, 1);
+      lcd.print("Alc. Level in 5s");
+      delay(1000);
+      lcd.setCursor(0, 1);
+      lcd.print("Alc. Level in 4s");
+      delay(1000);
+      
+      lcd.clear();
+      lcd.setCursor(0, 0);
+
+      lcd.print("Prepare to");
+      lcd.setCursor(0, 1);
+      lcd.print("Exhale in 3s");
+      delay(1000);
+      lcd.setCursor(0, 1);
+      lcd.print("Exhale in 2s");
+      delay(1000);
+      lcd.setCursor(0, 1);
+      lcd.print("Exhale in 1s");
+      delay(1000);
+      
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("EXHALE!");
+      lcd.setCursor(0, 1);
+      lcd.print("KEEP GOING");
+      
+      timerEnd = millis() + (alcohol_time_between_samples * alcohol_samples);
     }
 
       
-    if(alcohol_value < alcohol_sum)alcohol_sum = alcohol_value;
+    if(alcohol_value < alcohol_sum) alcohol_sum = alcohol_value;
 
     
+    lcd.setCursor(13,1);
+    lcd.print(String((timerEnd - millis())/1000) + " s");
+    Serial.println((timerEnd - millis())/1000);
     delay(alcohol_time_between_samples);
   } else {
     alcohol_calibrated = true;
@@ -242,6 +246,15 @@ void alcohol_calibration() {
     Serial.println();
     Serial.print("Alcohol calibrated multiplier: ");
     Serial.println(alcohol_multiplier);
+  
+    lcd.clear();
+    lcd.setCursor(0, 0);
+
+    lcd.print("Drunkness");
+    lcd.setCursor(0, 1);
+    lcd.print("Multiplier " + String(alcohol_multiplier) + "x");
+
+    delay(2000);
 
   }
   alcohol_index++;
